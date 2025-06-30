@@ -14,7 +14,7 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ---
 
-## ✨ Features
+## Features
 
 - **Chapter Downloader**  
   Supports bulk downloading via Table of Contents (TOC) URL or single chapter downloads. Handles static HTML and JavaScript-rendered content (using Playwright).
@@ -27,7 +27,7 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ---
 
-## 📦 Requirements
+## Requirements
 
 - **Python 3.7+** (latest version recommended)
 - **Playwright** – For scraping JavaScript-heavy sites like YoruApp
@@ -36,7 +36,7 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 - **Calibre** *(optional but recommended)* – For compiling to EPUB and other ebook formats
 - **Pandoc** *(optional)* – Universal document converter used in some EPUB pipelines
 
-## 🧪 Install Python dependencies
+## Install Python dependencies
 
 ```bash
 pip install requests beautifulsoup4 playwright
@@ -70,21 +70,21 @@ Add to PATH if needed:
 setx PATH "%PATH%;C:\Program Files\Pandoc"
 ```
 
-### 📥 Downloader
+### Downloader
 
 - Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
 - Choose download type:
   - **Static** – For sites serving plain HTML pages.
   - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
 
-### 🧹 Cleaner
+### Cleaner
 
 - Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
 - Supports two cleaning modes:
   - **Legacy**
   - **Universal** (recommended)
 
-### 📚 Compiler
+### Compiler
 
 - Compiles cleaned chapters into an **EPUB file** for convenient offline reading.
 
