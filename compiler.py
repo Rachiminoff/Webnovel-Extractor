@@ -1,251 +1,296 @@
-import re
+import os
+import subprocess
+import requests
 from pathlib import Path
 from bs4 import BeautifulSoup
 
-class ChapterCleaner:
+# Optional import for EbookLib EPUB creation
+try:
+    from ebooklib import epub
+except ImportError:
+    epub = None
 
-    def run(self, mode=2):
-        # Main entry point to clean all HTML files using the selected mode (default: 2 - universal cleaner)
-        selected_mode = mode
-        self.clean_all_html(mode=selected_mode)
+class EpubCompiler:
+    def __init__(self):
+        # Define directory for markdown/xhtml files (fan translations)
+        self.downloads_path = Path.home() / "Downloads"
+        self.markdown_dir = self.downloads_path / "fan_tl_markdown"
+        # If fan_tl_markdown doesn't exist, fallback to fan_tl_chapters
+        if not self.markdown_dir.exists():
+            self.markdown_dir = self.downloads_path / "fan_tl_chapters"
 
-    # Regex patterns for detecting intro and outro paragraphs that are commonly found in fan translations
-    intro_patterns = [
-        re.compile(r'^\s*(about|ko-fi|tips for lilies|planting a lily field|t/n|support|follow|master list)', re.I),
-    ]
+        # Directory for images used inside chapters
+        self.images_dir = self.markdown_dir / "images"
+        self.images_dir.mkdir(parents=True, exist_ok=True)
 
-    outro_patterns = [
-        re.compile(
-            r'^\s*(tl note|tl;|t/n:|author[’\'s]* note|ramblings|finally posting|thank you for reading|support me|as for the reason|next chapter|previous chapter|read on|thoughts\?|follow me|ko-fi|patreon|buy me a coffee|share this|thoughts on|check out these other novels|comments|leave a comment)',
-            re.I
-        ),
-    ]
+    def check_pandoc(self):
+        # Check if pandoc is installed by running "pandoc --version"
+        try:
+            subprocess.run(["pandoc", "--version"], check=True, stdout=subprocess.DEVNULL)
+            return True
+        except FileNotFoundError:
+            print("❌ Pandoc not found. Install from https://pandoc.org")
+            return False
 
-    # Pattern to detect junk text that often appears as noise in fan translation posts
-    junk_patterns = re.compile(
-        r"(table of contents|toc|back to top|comment|reblog|ko-fi|t/n:|insidethemirror|please read at yuri translations|please read at jiulian lian|please read at .+?wordpress\.com)",
-        re.I
-    )
+    def check_ebook_convert(self):
+        # Check if Calibre's ebook-convert tool is installed
+        try:
+            subprocess.run(["ebook-convert", "--version"], check=True, stdout=subprocess.DEVNULL)
+            return True
+        except FileNotFoundError:
+            print("❌ Calibre's ebook-convert not found. Install from https://calibre-ebook.com/")
+            return False
 
-    def __init__(self, input_folder=None, output_folder=None):
-        # Setup input and output folders, defaulting to Downloads/fan_tl_chapters and fan_tl_markdown
-        downloads_path = Path.home() / "Downloads"
-        self.input_folder = input_folder or downloads_path / "fan_tl_chapters"
-        self.output_folder = output_folder or downloads_path / "fan_tl_markdown"
-        self.output_folder.mkdir(parents=True, exist_ok=True)
-        self.junk_patterns = ChapterCleaner.junk_patterns  # Assign class-wide regex for junk
+    def get_xhtml_files(self):
+        # List all .xhtml files in the markdown directory, sorted by filename
+        return sorted(
+            (self.markdown_dir / f for f in os.listdir(self.markdown_dir) if f.endswith('.xhtml')),
+            key=lambda f: f.name
+        )
 
-    def select_mode(self):
-        # Interactive mode selection between old and new cleaner logic
-        print("Choose cleaning mode:")
-        print("1. Hazevie's baihe cleaner (old logic)")
-        print("2. Universal cleaner (new logic)")
-        while True:
-            choice = input("Enter 1 or 2: ").strip()
-            if choice in {"1", "2"}:
-                return int(choice)
-            print("Invalid input. Please enter 1 or 2.")
+    def download_image(self, url):
+        """
+        Download an image from a URL and save it in the images directory.
+        If image already exists, skip downloading.
+        """
+        print(f"⬇️ Downloading image from URL: {url}")
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+        except Exception as e:
+            print(f"❌ Failed to download image: {e}")
+            return None
+        
+        # Determine filename from URL and ensure proper extension
+        filename = url.split("/")[-1].split("?")[0]
+        if not filename:
+            filename = "image.jpg"
+        elif not any(filename.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif"]):
+            filename += ".jpg"
 
-    # Old cleaning method: removes intro paragraphs matching common keywords
-    def old_clean_intro(self, soup: BeautifulSoup):
-        intro_phrases = [
-            "about", "ko-fi", "tips for lilies", "planting a lily field",
-            "t/n", "support", "follow", "master list", "novels"
+        image_path = self.images_dir / filename
+        # Skip download if already exists
+        if image_path.exists():
+            print(f"ℹ️ Image already downloaded: {filename}")
+            return image_path
+
+        # Write image content to file
+        with open(image_path, "wb") as f:
+            f.write(response.content)
+        return image_path
+
+    def fix_images_in_xhtml(self, xhtml_path):
+        """
+        Parse an XHTML file and replace external image URLs with local paths
+        after downloading images locally.
+        """
+        print(f"🔍 Processing images in {xhtml_path.name}")
+        with open(xhtml_path, encoding='utf-8') as f:
+            soup = BeautifulSoup(f, 'html.parser')
+
+        changed = False
+        for img in soup.find_all('img'):
+            src = img.get('src')
+            if src and src.startswith('http'):
+                local_path = self.download_image(src)
+                if local_path:
+                    # Change image src to local relative path for EPUB
+                    img['src'] = f"images/{local_path.name}"
+                    changed = True
+
+        # Overwrite XHTML file if changes were made
+        if changed:
+            with open(xhtml_path, "w", encoding='utf-8') as f:
+                f.write(str(soup))
+
+    def get_metadata(self):
+        """
+        Prompt user to enter book metadata: title, author, language,
+        output filename, and optional cover image URL.
+        Downloads cover image if URL is provided.
+        """
+        print("\n📖 Enter book metadata:")
+        title = input("Title: ").strip()
+        author = input("Author: ").strip()
+        language = input("Language (e.g., en, zh): ").strip()
+        file_name = input("Output EPUB name (no extension): ").strip()
+        cover_url = input("Cover image URL (optional, leave blank if none): ").strip()
+        
+        cover_path = None
+        if cover_url:
+            cover_path = self.download_image(cover_url)
+            if cover_path is None:
+                print("⚠️ Proceeding without a cover image.")
+        
+        return {
+            "title": title,
+            "author": author,
+            "language": language,
+            "file_name": file_name,
+            "cover": cover_path
+        }
+
+    def write_metadata(self, metadata):
+        """
+        Write basic metadata in YAML format for Pandoc usage.
+        """
+        meta_path = self.markdown_dir / "metadata.yaml"
+        meta_lines = [
+            f'title: "{metadata["title"]}"',
+            f'author: "{metadata["author"]}"',
+            f'language: "{metadata["language"]}"'
         ]
-        for p in soup.find_all("p"):
-            txt = p.get_text(strip=True).lower()
-            if any(kw in txt for kw in intro_phrases):
-                print(f"Removing intro paragraph: {txt[:50]!r}")
-                p.decompose()
-            else:
-                break  # Stop at first paragraph that doesn't match
+        meta_path.write_text("\n".join(meta_lines) + "\n", encoding="utf-8")
+        return meta_path
 
-    # Old cleaning method: removes outro starting from first element with outro keywords
-    def old_clean_outro(self, soup: BeautifulSoup):
-        outro_keywords = [
-            "translator’s note", "translator's note", "tl note", "tl;", "author’s note",
-            "ramblings", "finally posting", "thank you for reading", "support me",
-            "as for the reason", "next chapter", "previous chapter", "read on", "thoughts?",
-            "follow me", "ko-fi", "patreon", "buy me a coffee", "share this", "thoughts on", "check out these other novels"
+    def compile_epub_pandoc(self, files, metadata_path, output_path, cover_path=None):
+        """
+        Use Pandoc to compile EPUB from XHTML files, applying metadata and optional cover.
+        """
+        cmd = [
+            "pandoc",
+            *[str(f) for f in files],
+            "--metadata-file", str(metadata_path.name),
+            "--toc",
+            "--toc-depth=1",
+            "-o", str(output_path.name)
         ]
-        elements = soup.find_all(["p", "div", "section", "h2", "h3", "h4", "h5", "h6"])
-        for i, el in enumerate(elements):
-            text = el.get_text(strip=True).lower()
-            if any(keyword in text for keyword in outro_keywords):
-                print(f"Removing outro starting at element #{i}: {text[:60]!r}")
-                for bad_el in elements[i:]:
-                    bad_el.decompose()
-                break
+        if cover_path:
+            cmd += ["--epub-cover-image", str(cover_path.resolve())]
 
-    def is_intro_paragraph(self, text):
-        # Checks if text matches intro regex patterns
-        return any(pat.match(text) for pat in self.intro_patterns)
+        print("\n📘 Creating EPUB with Pandoc…")
+        try:
+            subprocess.run(cmd, cwd=self.markdown_dir, check=True)
+            print(f"✅ EPUB saved to: {output_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error during EPUB creation:\n{e}")
 
-    def is_outro_paragraph(self, text):
-        # Checks if text matches outro regex patterns
-        return any(pat.match(text) for pat in self.outro_patterns)
+    def compile_epub_ebook_convert(self, files, metadata, output_path, cover_path=None):
+        """
+        Use Calibre's ebook-convert to generate EPUB.
+        Combines all XHTML files into one HTML file first.
+        """
+        combined_html_path = self.markdown_dir / "combined_for_ebook_convert.html"
+        print("\n📝 Combining XHTML files for ebook-convert…")
+        combined_content = ""
+        for f in files:
+            content = f.read_text(encoding="utf-8")
+            combined_content += f"\n<!-- {f.name} -->\n" + content
+        combined_html_path.write_text(combined_content, encoding="utf-8")
 
-    # New cleaner removes typical junk elements, scripts, styles, ads, and comments
-    def new_remove_junk(self, soup: BeautifulSoup):
-        for tag in soup(["script", "style", "footer", "nav", "aside", "form"]):
-            tag.decompose()
-
-        selectors = [
-            "#jp-post-flair", ".sharedaddy", ".sd-sharing", ".jetpack-likes-widget-wrapper",
-            "#jp-relatedposts", "#comments", ".entry-footer", ".comment-area", "#comment-area",
-            ".comments-title", ".comment-list", ".comment-content"
+        cmd = [
+            "ebook-convert",
+            str(combined_html_path),
+            str(output_path)
         ]
-        for sel in selectors:
-            for el in soup.select(sel):
-                print(f"Removing junk element: {sel}")
-                el.decompose()
+        if cover_path:
+            cmd += ["--cover", str(cover_path.resolve())]
+        if metadata.get("title"):
+            cmd += ["--title", metadata["title"]]
+        if metadata.get("author"):
+            cmd += ["--authors", metadata["author"]]
+        if metadata.get("language"):
+            cmd += ["--language", metadata["language"]]
 
-        # Remove paragraphs containing junk text based on junk_patterns regex
-        for p in soup.find_all("p"):
-            if self.junk_patterns.search(p.get_text()):
-                print(f"Removing junk paragraph: {p.get_text()[:50]!r}")
-                p.decompose()
+        print("\n📗 Creating EPUB with Calibre's ebook-convert…")
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"✅ EPUB saved to: {output_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error during EPUB creation:\n{e}")
+        finally:
+            # Clean up temporary combined HTML
+            combined_html_path.unlink(missing_ok=True)
 
-    # New cleaner removes intro paragraphs using regex patterns
-    def new_clean_intro(self, soup: BeautifulSoup):
-        for p in list(soup.find_all("p")):
-            txt = p.get_text(strip=True)
-            if self.is_intro_paragraph(txt):
-                print(f"Removing intro paragraph: {txt[:50]!r}")
-                p.decompose()
-            else:
-                break
+    def compile_epub_ebooklib(self, files, metadata, output_path, cover_path=None):
+        """
+        Use Python's EbookLib library to generate EPUB file.
+        """
+        if epub is None:
+            print("❌ ebooklib library not installed. Install with: pip install ebooklib")
+            return
 
-    # New cleaner removes outro paragraphs and related elements, including Ko-fi images and links
-    def new_clean_outro(self, soup: BeautifulSoup):
-        body = soup.body or soup
-        all_elements = list(body.descendants)
+        print("\n📙 Creating EPUB with EbookLib…")
+        book = epub.EpubBook()
 
-        found = None
-        for el in all_elements:
-            if not hasattr(el, 'get_text'):
-                continue
-            text = el.get_text(strip=True)
-            if self.is_outro_paragraph(text):
-                found = el
-                break
+        # Set metadata fields with fallbacks
+        book.set_title(metadata["title"] or "Untitled")
+        book.set_language(metadata["language"] or "en")
+        book.add_author(metadata["author"] or "Unknown")
 
-        if found:
-            current = found
-            while current and not hasattr(current, 'decompose'):
-                current = current.parent
+        # Set cover image if available
+        if cover_path and cover_path.exists():
+            book.set_cover(cover_path.name, cover_path.read_bytes())
 
-            if current and current.parent:
-                siblings = list(current.parent.contents)
-                start = False
-                for sibling in siblings:
-                    if sibling == current:
-                        start = True
-                    if start:
-                        try:
-                            sibling.decompose()
-                        except Exception:
-                            pass
+        # Add each XHTML file as a chapter
+        chapters = []
+        for f in files:
+            content = f.read_text(encoding="utf-8")
+            chap = epub.EpubHtml(title=f.stem, file_name=f.name, content=content)
+            book.add_item(chap)
+            chapters.append(chap)
 
-        # Remove Ko-fi and similar donation images
-        for img in soup.find_all("img"):
-            alt = img.get("alt", "").lower()
-            title = img.get("title", "").lower()
-            src = img.get("src", "").lower()
-            if any(x in alt or x in title or x in src for x in ["ko-fi", "kofi", "patreon", "buymeacoffee"]):
-                print(f"Removing Ko-fi image")
-                img.decompose()
+        # Define table of contents and spine order
+        book.toc = tuple(chapters)
+        book.spine = ['nav'] + chapters
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
 
-        # Remove Ko-fi and donation links
-        for a in soup.find_all("a", href=True):
-            href = a["href"].lower()
-            if any(x in href for x in ["ko-fi", "kofi", "patreon", "buymeacoffee"]):
-                print(f"Removing Ko-fi link")
-                a.decompose()
+        epub.write_epub(str(output_path), book)
+        print(f"✅ EPUB saved to: {output_path}")
 
-    # Attempt to identify main content of chapter by common container classes or fallback to largest div
-    def extract_main_content(self, soup: BeautifulSoup):
-        content_div = soup.select_one(".entry-content")
-        if content_div and len(content_div.get_text(strip=True)) > 30 and content_div.find_all("p"):
-            print(f"Using .entry-content with length: {len(content_div.get_text(strip=True))}")
-            return content_div
+    def run(self):
+        """
+        Main interactive method for user to choose EPUB creation method,
+        then process files, fix images, collect metadata, and compile EPUB.
+        """
+        print("Choose EPUB compilation method:")
+        print("1. Pandoc")
+        print("2. Calibre's ebook-convert")
+        print("3. EbookLib (Python library)")
+        print("4. Exit")
 
-        candidates = soup.select(".post-content, article, #content, .content, .main-content, entry-content")
-        for c in candidates:
-            if c.find_all("p") and len(c.get_text(strip=True)) > 30:
-                return c
+        choice = input("> ").strip()
+        if choice not in {"1", "2", "3"}:
+            print("Exiting.")
+            return
 
-        divs = soup.find_all("div")
-        if divs:
-            largest = max(divs, key=lambda d: len(d.get_text(strip=True)))
-            print(f"Fallback largest div length: {len(largest.get_text(strip=True))}")
-            return largest
+        # Check for required tools based on choice
+        if choice == "1" and not self.check_pandoc():
+            return
+        if choice == "2" and not self.check_ebook_convert():
+            return
+        if choice == "3" and epub is None:
+            print("❌ EbookLib not installed. Run: pip install ebooklib")
+            return
 
-        return soup.body or soup
+        files = self.get_xhtml_files()
+        if not files:
+            print("❌ No XHTML files found.")
+            return
 
-    # Wrap cleaned content in proper XHTML template with UTF-8 encoding and title
-    def wrap_xhtml(self, content: str, title: str) -> str:
-        return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="UTF-8"/>
-    <title>{title}</title>
-  </head>
-  <body>
-{content}
-  </body>
-</html>"""
+        # Fix external image URLs to local files for EPUB compatibility
+        for f in files:
+            self.fix_images_in_xhtml(f)
 
-    # Clean an individual HTML/XHTML file based on selected mode and return cleaned XHTML string
-    def clean_html_file(self, src_path: Path, mode: int = 2) -> str:
-        print(f"\n📂 Cleaning file: {src_path.name}")
-        raw_html = src_path.read_text(encoding="utf-8")
-        soup = BeautifulSoup(raw_html, "html.parser")
+        # Collect metadata info interactively
+        metadata = self.get_metadata()
+        output_path = self.downloads_path / f"{metadata['file_name']}.epub"
 
-        content_block = self.extract_main_content(soup)
-        print(f"Raw length before cleaning: {len(content_block.get_text(strip=True))}")
+        # For Pandoc, write YAML metadata file
+        meta_path = self.write_metadata(metadata)
 
-        if mode == 1:
-            # Use old cleaning logic
-            self.old_clean_intro(content_block)
-            self.old_clean_outro(content_block)
-        else:
-            # Use new cleaning logic
-            self.new_remove_junk(content_block)
-            self.new_clean_intro(content_block)
-            self.new_clean_outro(content_block)
-
-        text = content_block.get_text(strip=True)
-        print(f"✅ Cleaned length: {len(text)}")
-
-        if not text or len(text) < 30:
-            print(f"⚠ Skipped: {src_path.name} (too short)")
-            return ""
-
-        # Extract chapter number from filename to label chapter heading
-        chapter_num = re.search(r"(\d+)", src_path.name)
-        chapter_label = chapter_num.group(1).lstrip("0") if chapter_num else "?"
-
-        heading = f"<h1>Chapter {chapter_label}</h1>\n"
-        cleaned_content = heading + str(content_block)
-        return self.wrap_xhtml(cleaned_content, f"Chapter {chapter_label}")
-
-    # Clean all HTML/XHTML files in input folder and save cleaned files to output folder
-    def clean_all_html(self, mode: int = 2):
-        print("🧹 Cleaning all files …")
-        files = sorted(list(self.input_folder.glob("*.html")) + list(self.input_folder.glob("ch*.xhtml")))
-        for file in files:
-            cleaned = self.clean_html_file(file, mode)
-            if cleaned:
-                out_path = self.output_folder / file.name.replace(".html", ".xhtml")
-                out_path.write_text(cleaned, encoding="utf-8")
-                print(f"✔ Saved → {out_path.name}")
-            else:
-                print(f"⏭ Skipped: {file.name}")
+        # Call appropriate compilation method
+        if choice == "1":
+            self.compile_epub_pandoc(files, meta_path, output_path, metadata["cover"])
+            # Remove temporary metadata file
+            meta_path.unlink(missing_ok=True)
+        elif choice == "2":
+            self.compile_epub_ebook_convert(files, metadata, output_path, metadata["cover"])
+        elif choice == "3":
+            self.compile_epub_ebooklib(files, metadata, output_path, metadata["cover"])
 
 
 if __name__ == "__main__":
-    cleaner = ChapterCleaner()
-    selected_mode = cleaner.select_mode()  # User selects cleaning mode interactively
-    cleaner.clean_all_html(mode=selected_mode)
+    compiler = EpubCompiler()
+    compiler.run()
