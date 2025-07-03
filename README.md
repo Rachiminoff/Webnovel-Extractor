@@ -35,7 +35,7 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 **EPUB to PDF Converter**
 
-- A Python tool that converts EPUB ebooks to clean, well-formatted PDFs with cover extraction, chapter breaks, embedded images, and page numbers for easy reading and printing.
+- Converts EPUB ebooks to clean, well-formatted PDFs with cover extraction, chapter breaks, embedded images, and page numbers for easy reading and printing.
 ---
 
 ## Requirements
