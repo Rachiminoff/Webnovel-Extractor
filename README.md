@@ -16,18 +16,26 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ## Features
 
-- **Chapter Downloader**  
-  Supports bulk downloading via Table of Contents (TOC) URL or single chapter downloads. Handles static HTML and JavaScript-rendered content (using Playwright).
+*Downloader**
 
-- **Cleaner**  
-  Cleans raw HTML chapters by removing ads, comments, footers, translator notes, and other unwanted elements to produce clean XHTML ready for compilation.
+- Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
+- Choose download type:
+  - **Static** – For sites serving plain HTML pages.
+  - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
 
-- **Compiler**  
-  Compiles cleaned chapters into EPUB format for offline reading convenience.
+***Cleaner**
 
-- **EPUB to PDF**  
-  Converts EPUB files into a clean PDF for those who prefer PDF.
+- Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
+- Supports two cleaning modes:
+  - **Legacy**
+  - **Universal** (recommended)
 
+**Compiler**  
+- Compiles cleaned chapters into EPUB format for offline reading convenience.
+
+**EPUB to PDF Converter**
+
+- A Python tool that converts EPUB ebooks to clean, well-formatted PDFs with cover extraction, chapter breaks, embedded images, and page numbers for easy reading and printing.
 ---
 
 ## Requirements
@@ -74,25 +82,6 @@ Add to PATH if needed:
 # Example for Windows
 setx PATH "%PATH%;C:\Program Files\Pandoc"
 ```
-
-### Downloader
-
-- Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
-- Choose download type:
-  - **Static** – For sites serving plain HTML pages.
-  - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
-
-### Cleaner
-
-- Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
-- Supports two cleaning modes:
-  - **Legacy**
-  - **Universal** (recommended)
-
-### Compiler
-
-- Compiles cleaned chapters into an **EPUB file** for convenient offline reading.
-
 ---
 
 ## 📁 Directory Structure
@@ -122,5 +111,5 @@ output/              # Compiled EPUBs
 ## 🤝 Contribution & Support
 
 - Feel free to open **issues** or **pull requests** to improve support for more sites or add features.
-- Please respect copyrights.
-- **Support original authors and the translators!**
+- Please use this tool responsibly and respect copyright laws.
+- **Support original authors, fan, and official translators whenever possible!**
