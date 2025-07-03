@@ -25,21 +25,26 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 - **Compiler**  
   Compiles cleaned chapters into EPUB format for offline reading convenience.
 
+- **EPUB to PDF**  
+  Converts EPUB files into a clean PDF for those who prefer PDF.
+
 ---
 
 ## Requirements
 
-- **Python 3.7+** (latest version recommended)
+- **Python 3.7+** (latest version recommended; Python 3.10+ preferred for best compatibility)
 - **Playwright** – For scraping JavaScript-heavy sites like YoruApp
 - **Requests** – For making HTTP requests
 - **BeautifulSoup4** – For parsing and cleaning HTML
+- **EbookLib** – For handling EPUB files (used in EPUB compilation and conversion)
+- **WeasyPrint** – For converting HTML content to PDF (used in EPUB to PDF conversion)
 - **Calibre** *(optional but recommended)* – For compiling to EPUB and other ebook formats
 - **Pandoc** *(optional)* – Universal document converter used in some EPUB pipelines
 
 ## Install Python dependencies
 
 ```bash
-pip install requests beautifulsoup4 playwright
+pip install requests beautifulsoup4 playwright ebooklib weasyprint
 playwright install
 
 ```
