@@ -16,14 +16,14 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ## Features
 
-*Downloader**
+**Downloader**
 
 - Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
 - Choose download type:
   - **Static** – For sites serving plain HTML pages.
   - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
 
-***Cleaner**
+**Cleaner**
 
 - Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
 - Supports two cleaning modes:
