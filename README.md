@@ -16,30 +16,43 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ## Features
 
-- **Chapter Downloader**  
-  Supports bulk downloading via Table of Contents (TOC) URL or single chapter downloads. Handles static HTML and JavaScript-rendered content (using Playwright).
+**Downloader**
 
-- **Cleaner**  
-  Cleans raw HTML chapters by removing ads, comments, footers, translator notes, and other unwanted elements to produce clean XHTML ready for compilation.
+- Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
+- Choose download type:
+  - **Static** – For sites serving plain HTML pages.
+  - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
 
-- **Compiler**  
-  Compiles cleaned chapters into EPUB format for offline reading convenience.
+**Cleaner**
 
+- Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
+- Supports two cleaning modes:
+  - **Legacy**
+  - **Universal** (recommended)
+
+**Compiler**  
+- Compiles cleaned chapters into EPUB format for offline reading convenience.
+
+**EPUB to PDF Converter**
+
+- Converts EPUB ebooks to clean, well-formatted PDFs with cover extraction, chapter breaks, embedded images, and page numbers for easy reading and printing.
 ---
 
 ## Requirements
 
-- **Python 3.7+** (latest version recommended)
+- **Python 3.7+** (latest version recommended; Python 3.10+ preferred for best compatibility)
 - **Playwright** – For scraping JavaScript-heavy sites like YoruApp
 - **Requests** – For making HTTP requests
 - **BeautifulSoup4** – For parsing and cleaning HTML
+- **EbookLib** – For handling EPUB files (used in EPUB compilation and conversion)
+- **WeasyPrint** – For converting HTML content to PDF (used in EPUB to PDF conversion)
 - **Calibre** *(optional but recommended)* – For compiling to EPUB and other ebook formats
 - **Pandoc** *(optional)* – Universal document converter used in some EPUB pipelines
 
 ## Install Python dependencies
 
 ```bash
-pip install requests beautifulsoup4 playwright
+pip install requests beautifulsoup4 playwright ebooklib weasyprint
 playwright install
 
 ```
@@ -69,25 +82,6 @@ Add to PATH if needed:
 # Example for Windows
 setx PATH "%PATH%;C:\Program Files\Pandoc"
 ```
-
-### Downloader
-
-- Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
-- Choose download type:
-  - **Static** – For sites serving plain HTML pages.
-  - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
-
-### Cleaner
-
-- Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
-- Supports two cleaning modes:
-  - **Legacy**
-  - **Universal** (recommended)
-
-### Compiler
-
-- Compiles cleaned chapters into an **EPUB file** for convenient offline reading.
-
 ---
 
 ## 📁 Directory Structure
@@ -117,5 +111,5 @@ output/              # Compiled EPUBs
 ## 🤝 Contribution & Support
 
 - Feel free to open **issues** or **pull requests** to improve support for more sites or add features.
-- Please respect copyrights.
-- **Support original authors and the translators!**
+- Please use this tool responsibly and respect copyright laws.
+- **Support original authors, fan, and official translators whenever possible!**
