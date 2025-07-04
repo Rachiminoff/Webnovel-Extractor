@@ -190,29 +190,62 @@ class EPUBToPDF:
         print("Writing PDF...")
         HTML(string=full_html).write_pdf(output_pdf)
         print(f"Done! PDF saved to: {output_pdf}")
+    def convert_all_in_folder(self, folder_path):
+            """
+            Convert all .epub files in the given folder to PDFs,
+            saving output PDFs in the same folder.
+            """
+            folder = pathlib.Path(folder_path)
+            if not folder.is_dir():
+                print(f"❌ Error: {folder_path} is not a valid directory.")
+                return
 
-    # Entry point for standalone execution
+            epub_files = list(folder.glob("*.epub"))
+            if not epub_files:
+                print("No EPUB files found in the specified folder.")
+                return
+
+            print(f"Found {len(epub_files)} EPUB(s). Starting conversion...")
+
+            for epub_file in epub_files:
+                output_pdf = epub_file.with_suffix(".pdf")
+                print(f"\nConverting: {epub_file.name}")
+                try:
+                    self.epub_to_pdf_with_cover(str(epub_file), str(output_pdf))
+                except Exception as e:
+                    print(f"Failed to convert {epub_file.name}: {e}")
+
+            print("\nAll conversions done.")
+
+        # Entry point for standalone execution
     def run(self):
-        self.suppress_glib_warnings()
-        try:
-            epub_path = input("Enter path to EPUB: ").strip('"')
-            base_name = pathlib.Path(epub_path).stem
-            downloads_dir = str(pathlib.Path.home() / "Downloads")
-            output_pdf = os.path.join(downloads_dir, base_name + ".pdf")
-            self.epub_to_pdf_with_cover(epub_path, output_pdf)
-        finally:
-            self.restore_stderr()
+            self.suppress_glib_warnings()
+            try:
+                choice = input("Convert (1) single EPUB or (2) all EPUBs in folder? Enter 1 or 2: ").strip()
+                if choice == "1":
+                    epub_path = input("Enter path to EPUB: ").strip('"')
+                    base_name = pathlib.Path(epub_path).stem
+                    downloads_dir = str(pathlib.Path.home() / "Downloads")
+                    output_pdf = os.path.join(downloads_dir, base_name + ".pdf")
+                    self.epub_to_pdf_with_cover(epub_path, output_pdf)
+                elif choice == "2":
+                    folder_path = input("Enter folder path containing EPUBs: ").strip('"')
+                    self.convert_all_in_folder(folder_path)
+                else:
+                    print("Invalid option.")
+            finally:
+                self.restore_stderr()
 
-    # Suppress annoying GTK/GLib warnings from weasyprint/cairo (not very effective)
+        # Suppress annoying GTK/GLib warnings from weasyprint/cairo (not very effective)
     def suppress_glib_warnings(self):
-        os.environ["G_MESSAGES_DEBUG"] = ""
-        os.environ["G_DEBUG"] = ""
-        try:
-            import logging
-            logging.getLogger("gi.repository.GLib").setLevel(logging.CRITICAL)
-        except Exception:
-            pass
-        sys.stderr = open(os.devnull, 'w')
+            os.environ["G_MESSAGES_DEBUG"] = ""
+            os.environ["G_DEBUG"] = ""
+            try:
+                import logging
+                logging.getLogger("gi.repository.GLib").setLevel(logging.CRITICAL)
+            except Exception:
+                pass
+            sys.stderr = open(os.devnull, 'w')
 
     # Restore normal stderr
     def restore_stderr(self):
