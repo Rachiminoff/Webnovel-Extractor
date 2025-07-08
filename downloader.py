@@ -4,6 +4,7 @@ import requests
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+import re
 
 try:
     from playwright.sync_api import sync_playwright
@@ -26,33 +27,72 @@ class ChapterDownloader:
 
     def get_chapter_links_static(self, toc_url):
         """
-        Scrapes chapter URLs from a static HTML Table of Contents page.
-        Looks for anchor tags with keywords related to chapters.
+        Scrapes chapter URLs from a static HTML Table of Contents (TOC) page.
+
+        1. Attempts to find anchor tags with chapter-related keywords.
+        2. If none found, falls back to checking <ul> with common TOC-related class names.
+        3. Returns a list of (url, Chapter N) tuples.
         """
         print("📖 Fetching TOC (static)...")
         res = self.session.get(toc_url)
         res.raise_for_status()
         soup = BeautifulSoup(res.text, 'html.parser')
 
+        # Common keywords used in chapter names
         chapter_keywords = [
-            "chapter", "part", "mail", "extra", "final", "ending", "prologue", "epilogue"
+            "chapter", "part", "mail", "extra", "final", "ending", "prologue", "epilogue",
+            "volume", "vol", "act", "story", "installment", "segment", "section", "scene"
         ]
 
-        candidate_links = []
-        # Find all anchor tags and filter those whose text matches chapter keywords
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            text = a.get_text(strip=True).lower()
-            if any(keyword in text for keyword in chapter_keywords):
-                full_url = urljoin(toc_url, href)
-                candidate_links.append(full_url)
+        # Fallback <ul> class keywords used by blog themes and WordPress
+        list_keywords = [
+            "wp-block-list", "chapter-list", "chapters", "toc", "post-list",
+            "entry-list", "index", "list"
+        ]
 
-        # Remove duplicates while keeping order
-        chapter_links = list(dict.fromkeys(candidate_links))
-        print(f"🔗 Found {len(chapter_links)} candidate chapters.")
-        # Return list of tuples (url, "Chapter X")
-        return [(url, f"Chapter {i+1}") for i, url in enumerate(chapter_links)]
-    
+        chapter_links = []
+
+        # Step 1: Try keyword-based anchor matching
+        for a in soup.find_all('a', href=True):
+            text = a.get_text(strip=True).lower()
+            if any(k in text for k in chapter_keywords):
+                full_url = urljoin(toc_url, a['href'])
+                chapter_links.append(full_url)
+
+        if chapter_links:
+            print(f"🔗 Found {len(chapter_links)} chapter links using keyword match.")
+        else:
+            print("⚠️ No chapter keywords found. Falling back to list-based structure...")
+
+            # Step 2: Try to find <ul> that likely contains TOC items
+            ul = None
+            for ul_tag in soup.find_all('ul'):
+                ul_class = ul_tag.get('class', [])
+                if any(any(keyword in c.lower() for keyword in list_keywords) for c in ul_class):
+                    ul = ul_tag
+                    break
+
+            if ul:
+                for li in ul.find_all('li'):
+                    for a in li.find_all('a', href=True):
+                        full_url = urljoin(toc_url, a['href'])
+                        chapter_links.append(full_url)
+            else:
+                print("❌ No suitable <ul> TOC list found using known keywords.")
+
+        # Step 3: Remove duplicates while preserving order
+        seen = set()
+        unique_links = []
+        for link in chapter_links:
+            if link not in seen:
+                unique_links.append(link)
+                seen.add(link)
+
+        print(f"🔗 Final chapter count: {len(unique_links)}")
+
+        # Step 4: Return list of tuples (url, "Chapter X")
+        return [(url, f"Chapter {i+1}") for i, url in enumerate(unique_links)]
+
     def get_chapter_links_rendered(self, toc_url):
         """
         Scrapes chapter URLs from a JavaScript-rendered site like YoruApp using Playwright.
@@ -108,13 +148,28 @@ class ChapterDownloader:
     def download_html_static_bulk(self, chapter_links):
         """
         Download all static chapters in bulk using the TOC links.
+        Prompts user for a starting chapter number and names files accordingly.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        print("📥 Starting static downloads...")
-        for idx, (url, _) in enumerate(chapter_links, 1):
-            filename = self.output_dir / f"ch{idx:03}.xhtml"
+
+        # Ask user for starting chapter number
+        while True:
+            start_input = input("🔢 Start numbering from chapter number (e.g. 1 or 10): ").strip()
+            if start_input.isdigit():
+                start_chapter = int(start_input)
+                break
+            else:
+                print("Invalid input. Please enter a number.")
+
+        print(f"📥 Starting static downloads from Chapter {start_chapter}...")
+
+        for offset, (url, _) in enumerate(chapter_links):
+            chapter_num = start_chapter + offset
+            filename = self.output_dir / f"ch{chapter_num:03}.xhtml"
             self.download_html_static_file(url, filename)
+
         print("✅ All static chapters downloaded.")
+
 
     def download_chapters_rendered(self, chapter_links):
         """

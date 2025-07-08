@@ -28,7 +28,7 @@ class MainController:
             if choice == "1":
                 self.downloader.run()
             elif choice == "2":
-                self.cleaner.run()
+                self.Cleaner.run()
             elif choice == "3":
                 self.compiler.run()
             elif choice == "4":

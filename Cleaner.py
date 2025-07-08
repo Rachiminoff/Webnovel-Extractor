@@ -16,7 +16,7 @@ class ChapterCleaner:
 
     outro_patterns = [
         re.compile(
-            r'^\s*(tl note|tl;|t/n:|author[’\'s]* note|ramblings|finally posting|thank you for reading|support me|as for the reason|next chapter|previous chapter|read on|thoughts\?|follow me|ko-fi|patreon|buy me a coffee|share this|thoughts on|check out these other novels|comments|leave a comment)',
+            r'^\s*(tl note|tl;|t/n:|lp|unlock early access to chapters|author[’\'s]* note|ramblings|finally posting|thank you for reading|support me|as for the reason|next chapter|previous chapter|read on|thoughts\?|follow me|ko-fi|patreon|buy me a coffee|share this|thoughts on|check out these other novels|comments|leave a comment)',
             re.I
         ),
     ]
