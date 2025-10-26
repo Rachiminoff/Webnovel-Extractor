@@ -121,16 +121,26 @@ class ChapterDownloader:
             page = browser.new_page()
             try:
                 page.goto(toc_url, wait_until="networkidle")
-                page.wait_for_selector('a:has-text("Read")', timeout=20000)
-                buttons = page.query_selector_all('a:has-text("Read")')
 
-                for btn in buttons:
-                    href = btn.get_attribute("href")
-                    title_node = btn.query_selector("span")
-                    title = title_node.inner_text().strip() if title_node else "Untitled"
-                    if href and href.startswith("read/"):
+                # Wait for the table rows containing chapters
+                page.wait_for_selector("table tbody tr", timeout=25000)
+                rows = page.query_selector_all("table tbody tr")
+
+                for row in rows:
+                    # Find the 'Read' button inside the last <td>
+                    read_link = row.query_selector("a:has-text('Read')")
+                    if not read_link:
+                        continue
+
+                    href = read_link.get_attribute("href")
+                    # The title is usually in the 2nd <td>
+                    title_td = row.query_selector("td:nth-child(2)")
+                    title = title_td.inner_text().strip() if title_td else "Untitled"
+
+                    if href:
                         full_url = urljoin(toc_url, href)
                         links.append((full_url, title))
+
             except Exception as e:
                 print(f"❌ Error extracting Yoru chapter links: {e}")
             finally:
@@ -148,13 +158,19 @@ class ChapterDownloader:
                 print(f"📘 Downloading Yoru chapter {idx}: {url}")
                 try:
                     page.goto(url, wait_until="networkidle")
-                    page.wait_for_selector('div.prose.max-w-none', timeout=20000)
-                    content_div = page.query_selector('div.prose.max-w-none')
-                    html_content = content_div.inner_html()
-                    title_div = page.query_selector('div.mt-4.text-2xl.font-bold')
+
+                    # Updated content container selector
+                    page.wait_for_selector("div.prose", timeout=25000)
+                    content_div = page.query_selector("div.prose")
+                    html_content = content_div.inner_html() if content_div else ""
+
+                    # Updated title element selector
+                    title_div = page.query_selector("h1, div.text-2xl.font-bold")
                     title = title_div.inner_text().strip() if title_div else f"Chapter_{idx:03}"
+
                     safe_title = self.sanitize_filename(title)
                     filename = self.output_dir / f"ch{idx:03}.xhtml"
+
                     xhtml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -164,6 +180,7 @@ class ChapterDownloader:
 {html_content}
 </body>
 </html>"""
+
                     with open(filename, 'w', encoding='utf-8') as f:
                         f.write(xhtml)
                     print(f"✔ Saved: {filename.name}")
@@ -171,6 +188,7 @@ class ChapterDownloader:
                     print(f"❌ Failed to download {url}: {e}")
             browser.close()
         print("✅ All Yoru chapters downloaded.")
+        
 
     # --- FOXAHOLIC DOWNLOAD ---
     def get_chapter_links_foxaholic(self, toc_url):
