@@ -6,7 +6,7 @@ A utility tool for downloading, cleaning, and compiling web novel chapters, prim
 
 ## ⚠️ Important Notice
 
-- This tool is **confirmed to work best on YoruApp** (a popular fan translation novel hosting platform) and **WordPress-based sites**.
+- This tool is **confirmed to work best on YoruApp/LumoStories** (a popular fan translation novel hosting platform) and **WordPress-based sites**.
 - Functionality on other novel websites or platforms **may be limited or require custom adjustments**.
 - Performance and reliability may vary outside these supported site types.
 - Chapters downloaded from YoruApp are already clean and properly structured. You can skip the cleaning step and proceed directly to compilation.
