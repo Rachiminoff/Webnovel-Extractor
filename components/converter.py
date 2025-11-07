@@ -8,9 +8,7 @@ from bs4 import BeautifulSoup
 from weasyprint import HTML
 
 class EPUBToPDF:
-    # ============================
-    # Default CSS Styling (no watermark)
-    # ============================
+    # Default CSS Styling 
     CUSTOM_CSS = """
     <style>
     @page {
