@@ -1,7 +1,7 @@
-from downloader import ChapterDownloader
-from Cleaner import ChapterCleaner
-from compiler import EpubCompiler
-from converter import EPUBToPDF
+from components.downloader import ChapterDownloader
+from components.Cleaner import ChapterCleaner
+from components.compiler import EpubCompiler
+from components.converter import EPUBToPDF
 import time
 
 class MainController:
