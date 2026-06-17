@@ -2,250 +2,301 @@ import re
 from pathlib import Path
 from bs4 import BeautifulSoup
 
+
 class ChapterCleaner:
 
-    def run(self, mode=2):
-        # Main entry point to clean all HTML files using the selected mode (default: 2 - universal cleaner)
-        selected_mode = mode
-        self.clean_all_html(mode=selected_mode)
-
-    # Regex patterns for detecting intro and outro paragraphs that are commonly found in fan translations
     intro_patterns = [
-        re.compile(r'^\s*(about|ko-fi|tips for lilies|planting a lily field|t/n|support|follow|master list)', re.I),
-    ]
-
-    outro_patterns = [
         re.compile(
-            r'^\s*(tl note|tl;|t/n:|lp|unlock early access to chapters|author[’\'s]* note|ramblings|finally posting|thank you for reading|support me|as for the reason|next chapter|previous chapter|read on|thoughts\?|follow me|ko-fi|patreon|buy me a coffee|share this|thoughts on|check out these other novels|comments|leave a comment)',
+            r'^\s*(about|ko-fi|tips for lilies|planting a lily field|'
+            r'support|follow|master list|important update|'
+            r'announcement|notice|password locked)',
             re.I
         ),
     ]
 
-    # Pattern to detect junk text that often appears as noise in fan translation posts
+    outro_patterns = [
+        re.compile(
+            r'(author.?note|ramblings|thank you for reading|'
+            r'next chapter|previous chapter|read on|'
+            r'patreon|ko-fi|buy me a coffee|discord)',
+            re.I
+        ),
+    ]
+
     junk_patterns = re.compile(
-        r"(table of contents|toc|back to top|comment|reblog|ko-fi|t/n:|insidethemirror|please read at yuri translations|please read at jiulian lian|please read at .+?wordpress\.com)",
+        r"(table of contents|toc|back to top|comment|reblog|ko-fi|patreon|"
+        r"insidethemirror|wordpress\.com|please read at|novelupdates|click here|read more|"
+        r"continue reading|subscribe|newsletter|join.*discord)",
         re.I
     )
 
+    SOCIAL_REGEX = re.compile(
+        r"(discord|twitter|facebook|instagram|telegram|reddit|patreon|ko-?fi)",
+        re.I
+    )
+
+    SUPPORT_REGEX = re.compile(
+        r"(support.*translator|support.*team|donate|commission|early access|advance chapter|sponsor)",
+        re.I
+    )
+
+    WATERMARK_REGEX = re.compile(
+        r"(read.*?(?:at|on)\s+\w+|stolen from|support the translator|please visit|original source)",
+        re.I
+    )
+
+    NOTICE_REGEX = re.compile(
+        r"(important update|important notice|announcement|site notice|password locked|"
+        r"join my discord.*password|discord.*password|jjwxc|novelupdates|"
+        r"grammar mistakes|sorry for any grammar mistakes|release schedule|"
+        r"translation update|please join my discord|terribly sorry for the inconvenience)",
+        re.I
+    )
+
+    DISCLAIMER_PHRASES = [
+        "fan translation presented by",
+        "this novel does not belong to me",
+        "does not belong to me",
+        "not mine",
+        "grammar mistakes",
+        "important notice",
+        "important update",
+        "password locked",
+        "jjwxc",
+        "please join my discord",
+        "terribly sorry for the inconvenience",
+    ]
+
     def __init__(self, input_folder=None, output_folder=None):
-        # Setup input and output folders, defaulting to Downloads/fan_tl_chapters and fan_tl_markdown
         downloads_path = Path.home() / "Downloads"
         self.input_folder = input_folder or downloads_path / "fan_tl_chapters"
         self.output_folder = output_folder or downloads_path / "fan_tl_markdown"
         self.output_folder.mkdir(parents=True, exist_ok=True)
-        self.junk_patterns = ChapterCleaner.junk_patterns  # Assign class-wide regex for junk
 
-    def select_mode(self):
-        # Interactive mode selection between old and new cleaner logic
-        print("Choose cleaning mode:")
-        print("1. Hazevie's baihe cleaner (old logic)")
-        print("2. Universal cleaner (new logic)")
-        while True:
-            choice = input("Enter 1 or 2: ").strip()
-            if choice in {"1", "2"}:
-                return int(choice)
-            print("Invalid input. Please enter 1 or 2.")
+    # ---------------- MAIN ----------------
 
-    # Old cleaning method: removes intro paragraphs matching common keywords
-    def old_clean_intro(self, soup: BeautifulSoup):
-        intro_phrases = [
-            "about", "ko-fi", "tips for lilies", "planting a lily field",
-            "t/n", "support", "follow", "master list", "novels"
-        ]
-        for p in soup.find_all("p"):
-            txt = p.get_text(strip=True).lower()
-            if any(kw in txt for kw in intro_phrases):
-                print(f"Removing intro paragraph: {txt[:50]!r}")
-                p.decompose()
-            else:
-                break  # Stop at first paragraph that doesn't match
+    def run(self, mode=2):
+        self.clean_all_html(mode)
 
-    # Old cleaning method: removes outro starting from first element with outro keywords
-    def old_clean_outro(self, soup: BeautifulSoup):
-        outro_keywords = [
-            "translator’s note", "translator's note", "tl note", "tl;", "author’s note",
-            "ramblings", "finally posting", "thank you for reading", "support me",
-            "as for the reason", "next chapter", "previous chapter", "read on", "thoughts?",
-            "follow me", "ko-fi", "patreon", "buy me a coffee", "share this", "thoughts on", "check out these other novels"
-        ]
-        elements = soup.find_all(["p", "div", "section", "h2", "h3", "h4", "h5", "h6"])
-        for i, el in enumerate(elements):
-            text = el.get_text(strip=True).lower()
-            if any(keyword in text for keyword in outro_keywords):
-                print(f"Removing outro starting at element #{i}: {text[:60]!r}")
-                for bad_el in elements[i:]:
-                    bad_el.decompose()
+    def clean_all_html(self, mode=2):
+        print("🧹 Cleaning all files …")
+
+        files = sorted(
+            list(self.input_folder.glob("*.html")) +
+            list(self.input_folder.glob("*.xhtml")),
+            key=lambda p: int(
+                self.extract_chapter_number(p.name)
+                if self.extract_chapter_number(p.name).isdigit()
+                else 999999
+            )
+        )
+
+        for file in files:
+            cleaned = self.clean_html_file(file, mode)
+
+            out_path = self.output_folder / file.with_suffix(".xhtml").name
+            out_path.write_text(cleaned, encoding="utf-8")
+            print(f"✔ Saved → {out_path.name}")
+
+    # ---------------- CLEANING ----------------
+
+    def clean_html_file(self, src_path: Path, mode: int = 2) -> str:
+        print(f"\n📂 Cleaning file: {src_path.name}")
+
+        raw_html = src_path.read_text(encoding="utf-8", errors="replace")
+        soup = BeautifulSoup(raw_html, "html.parser")
+
+        content = self.extract_main_content(soup)
+
+        print(f"Raw length: {len(content.get_text(strip=True))}")
+
+        self.remove_unwanted_tags(content)
+        self.remove_wp_important_update(content)   # ⭐ FIX HERE
+        self.clean_notice_blocks(content)
+        self.remove_announcement_blocks(content)
+        self.clean_intro(content)
+        self.clean_outro(content)
+        self.remove_junk_paragraphs(content)
+        self.remove_duplicate_paragraphs(content)
+        self.remove_existing_chapter_titles(content)
+        self.strip_attributes(content)
+
+        text = content.get_text("\n", strip=True)
+
+        print(f"Cleaned length: {len(text)}")
+
+        if len(text.split()) < 150:
+            print(f"⚠ Warning: {src_path.name} is short ({len(text.split())} words)")
+
+        chapter_num = self.extract_chapter_number(src_path.name)
+        heading = f"<h1>Chapter {chapter_num}</h1>\n"
+
+        return self.wrap_xhtml(heading + str(content), f"Chapter {chapter_num}")
+
+    # ---------------- SAFE IMPORTANT UPDATE REMOVER ----------------
+
+    def remove_wp_important_update(self, soup):
+        heading = soup.find(
+            lambda t:
+            t.name in ["h1", "h2", "h3"]
+            and "important update" in t.get_text(" ", strip=True).lower()
+        )
+
+        if not heading:
+            return
+
+        # remove ONLY until hr separator (safe boundary)
+        current = heading
+
+        while current:
+            nxt = current.find_next_sibling()
+
+            current.decompose()
+
+            if not nxt:
                 break
 
-    def is_intro_paragraph(self, text):
-        # Checks if text matches intro regex patterns
-        return any(pat.match(text) for pat in self.intro_patterns)
+            if getattr(nxt, "name", None) == "hr":
+                nxt.decompose()
+                break
 
-    def is_outro_paragraph(self, text):
-        # Checks if text matches outro regex patterns
-        return any(pat.match(text) for pat in self.outro_patterns)
+            current = nxt
 
-    # New cleaner removes typical junk elements, scripts, styles, ads, and comments
-    def new_remove_junk(self, soup: BeautifulSoup):
-        for tag in soup(["script", "style", "footer", "nav", "aside", "form"]):
+    # ---------------- CORE ----------------
+
+    def extract_main_content(self, soup):
+        candidates = soup.select(
+            ".entry-content, .post-content, article, #content, .content, .main-content"
+        )
+
+        best, best_score = None, 0
+
+        for c in candidates:
+            score = self.content_score(c)
+            if score > best_score:
+                best, best_score = c, score
+
+        return best or soup.body or soup
+
+    def content_score(self, tag):
+        text = tag.get_text(" ", strip=True)
+
+        text_len = len(text)
+        p_count = len(tag.find_all("p"))
+
+        link_text = sum(len(a.get_text(" ", strip=True)) for a in tag.find_all("a"))
+
+        density = text_len / max(link_text, 1)
+        junk_hits = len(self.junk_patterns.findall(text))
+
+        bonus = 200 if ('"' in text or "“" in text) else 0
+
+        return text_len + (p_count * 50) + (density * 20) + bonus - (junk_hits * 200)
+
+    # ---------------- TAG CLEANING ----------------
+
+    def remove_unwanted_tags(self, soup):
+        for tag in soup(["script", "style", "nav", "aside", "form", "iframe"]):
             tag.decompose()
 
-        selectors = [
-            "#jp-post-flair", ".sharedaddy", ".sd-sharing", ".jetpack-likes-widget-wrapper",
-            "#jp-relatedposts", "#comments", ".entry-footer", ".comment-area", "#comment-area",
-            ".comments-title", ".comment-list", ".comment-content"
-        ]
-        for sel in selectors:
-            for el in soup.select(sel):
-                print(f"Removing junk element: {sel}")
+    def clean_notice_blocks(self, soup):
+        for tag in soup.find_all(["p"]):   # SAFE: only p
+            text = tag.get_text(" ", strip=True).lower()
+
+            if self.NOTICE_REGEX.search(text):
+                tag.decompose()
+
+    def remove_announcement_blocks(self, soup):
+        for tag in soup.find_all(["p"]):   # SAFE: only p
+            text = tag.get_text(" ", strip=True).lower()
+
+            if self.NOTICE_REGEX.search(text):
+                tag.decompose()
+
+    def clean_intro(self, soup):
+        blocks = soup.find_all(["p", "div", "section"])
+
+        for el in blocks[:15]:
+            txt = el.get_text(" ", strip=True)
+            if any(p.search(txt) for p in self.intro_patterns):
                 el.decompose()
-
-        # Remove paragraphs containing junk text based on junk_patterns regex
-        for p in soup.find_all("p"):
-            if self.junk_patterns.search(p.get_text()):
-                print(f"Removing junk paragraph: {p.get_text()[:50]!r}")
-                p.decompose()
-
-    # New cleaner removes intro paragraphs using regex patterns
-    def new_clean_intro(self, soup: BeautifulSoup):
-        for p in list(soup.find_all("p")):
-            txt = p.get_text(strip=True)
-            if self.is_intro_paragraph(txt):
-                print(f"Removing intro paragraph: {txt[:50]!r}")
-                p.decompose()
             else:
                 break
 
-    # New cleaner removes outro paragraphs and related elements, including Ko-fi images and links
-    def new_clean_outro(self, soup: BeautifulSoup):
-        body = soup.body or soup
-        all_elements = list(body.descendants)
+    def clean_outro(self, soup):
+        blocks = soup.find_all(["p", "div", "section"])
 
-        found = None
-        for el in all_elements:
-            if not hasattr(el, 'get_text'):
-                continue
-            text = el.get_text(strip=True)
-            if self.is_outro_paragraph(text):
-                found = el
+        for i in range(len(blocks) - 1, -1, -1):
+            txt = blocks[i].get_text(" ", strip=True)
+
+            if any(p.search(txt) for p in self.outro_patterns):
+                for el in blocks[i:]:
+                    el.decompose()
                 break
 
-        if found:
-            current = found
-            while current and not hasattr(current, 'decompose'):
-                current = current.parent
+    def remove_junk_paragraphs(self, soup):
+        for p in list(soup.find_all("p")):   # SAFE: only p
 
-            if current and current.parent:
-                siblings = list(current.parent.contents)
-                start = False
-                for sibling in siblings:
-                    if sibling == current:
-                        start = True
-                    if start:
-                        try:
-                            sibling.decompose()
-                        except Exception:
-                            pass
+            text = p.get_text(" ", strip=True).lower()
 
-        # Remove Ko-fi and similar donation images
-        for img in soup.find_all("img"):
-            alt = img.get("alt", "").lower()
-            title = img.get("title", "").lower()
-            src = img.get("src", "").lower()
-            if any(x in alt or x in title or x in src for x in ["ko-fi", "kofi", "patreon", "buymeacoffee"]):
-                print(f"Removing Ko-fi image")
-                img.decompose()
+            if (
+                not text or
+                self.NOTICE_REGEX.search(text) or
+                self.junk_patterns.search(text) or
+                self.SOCIAL_REGEX.search(text) or
+                self.SUPPORT_REGEX.search(text) or
+                self.WATERMARK_REGEX.search(text)
+            ):
+                p.decompose()
 
-        # Remove Ko-fi and donation links
-        for a in soup.find_all("a", href=True):
-            href = a["href"].lower()
-            if any(x in href for x in ["ko-fi", "kofi", "patreon", "buymeacoffee"]):
-                print(f"Removing Ko-fi link")
-                a.decompose()
+    def remove_duplicate_paragraphs(self, soup):
+        seen = set()
 
-    # Attempt to identify main content of chapter by common container classes or fallback to largest div
-    def extract_main_content(self, soup: BeautifulSoup):
-        content_div = soup.select_one(".entry-content")
-        if content_div and len(content_div.get_text(strip=True)) > 30 and content_div.find_all("p"):
-            print(f"Using .entry-content with length: {len(content_div.get_text(strip=True))}")
-            return content_div
+        for tag in soup.find_all(["p"]):
+            text = tag.get_text(" ", strip=True)
+            norm = re.sub(r"\s+", " ", text.lower())
 
-        candidates = soup.select(".post-content, article, #content, .content, .main-content, entry-content")
-        for c in candidates:
-            if c.find_all("p") and len(c.get_text(strip=True)) > 30:
-                return c
+            if len(norm) < 15:
+                continue
 
-        divs = soup.find_all("div")
-        if divs:
-            largest = max(divs, key=lambda d: len(d.get_text(strip=True)))
-            print(f"Fallback largest div length: {len(largest.get_text(strip=True))}")
-            return largest
+            if norm in seen:
+                tag.decompose()
+            else:
+                seen.add(norm)
 
-        return soup.body or soup
+    def remove_existing_chapter_titles(self, soup):
+        for h in soup.find_all(["h1", "h2"]):
+            if re.search(r"(chapter|chap\.?)\s*\d+", h.get_text(), re.I):
+                h.decompose()
 
-    # Wrap cleaned content in proper XHTML template with UTF-8 encoding and title
-    def wrap_xhtml(self, content: str, title: str) -> str:
+    def strip_attributes(self, soup):
+        for tag in soup.find_all(True):
+            tag.attrs = {}
+
+    # ---------------- UTIL ----------------
+
+    def extract_chapter_number(self, name):
+        m = re.search(r"chapter[_\-\s]*(\d+)", name, re.I)
+        if m:
+            return m.group(1)
+
+        nums = re.findall(r"\d+", name)
+        return nums[-1] if nums else "?"
+
+    def wrap_xhtml(self, content, title):
         return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="UTF-8"/>
-    <title>{title}</title>
-  </head>
-  <body>
+<head>
+<meta charset="UTF-8"/>
+<title>{title}</title>
+</head>
+<body>
 {content}
-  </body>
+</body>
 </html>"""
-
-    # Clean an individual HTML/XHTML file based on selected mode and return cleaned XHTML string
-    def clean_html_file(self, src_path: Path, mode: int = 2) -> str:
-        print(f"\n📂 Cleaning file: {src_path.name}")
-        raw_html = src_path.read_text(encoding="utf-8")
-        soup = BeautifulSoup(raw_html, "html.parser")
-
-        content_block = self.extract_main_content(soup)
-        print(f"Raw length before cleaning: {len(content_block.get_text(strip=True))}")
-
-        if mode == 1:
-            # Use old cleaning logic
-            self.old_clean_intro(content_block)
-            self.old_clean_outro(content_block)
-        else:
-            # Use new cleaning logic
-            self.new_remove_junk(content_block)
-            self.new_clean_intro(content_block)
-            self.new_clean_outro(content_block)
-
-        text = content_block.get_text(strip=True)
-        print(f"✅ Cleaned length: {len(text)}")
-
-        if not text or len(text) < 30:
-            print(f"⚠ Skipped: {src_path.name} (too short)")
-            return ""
-
-        # Extract chapter number from filename to label chapter heading
-        chapter_num = re.search(r"(\d+)", src_path.name)
-        chapter_label = chapter_num.group(1).lstrip("0") if chapter_num else "?"
-
-        heading = f"<h1>Chapter {chapter_label}</h1>\n"
-        cleaned_content = heading + str(content_block)
-        return self.wrap_xhtml(cleaned_content, f"Chapter {chapter_label}")
-
-    # Clean all HTML/XHTML files in input folder and save cleaned files to output folder
-    def clean_all_html(self, mode: int = 2):
-        print("🧹 Cleaning all files …")
-        files = sorted(list(self.input_folder.glob("*.html")) + list(self.input_folder.glob("ch*.xhtml")))
-        for file in files:
-            cleaned = self.clean_html_file(file, mode)
-            if cleaned:
-                out_path = self.output_folder / file.name.replace(".html", ".xhtml")
-                out_path.write_text(cleaned, encoding="utf-8")
-                print(f"✔ Saved → {out_path.name}")
-            else:
-                print(f"⏭ Skipped: {file.name}")
 
 
 if __name__ == "__main__":
     cleaner = ChapterCleaner()
-    selected_mode = cleaner.select_mode()  # User selects cleaning mode interactively
-    cleaner.clean_all_html(mode=selected_mode)
+    cleaner.run()
