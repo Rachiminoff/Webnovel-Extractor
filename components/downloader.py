@@ -4,6 +4,7 @@ import requests
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+from components.scrapers.sites.lumo import LumoScraper
 
 try:
     from playwright.sync_api import sync_playwright
@@ -19,6 +20,15 @@ class ChapterDownloader:
         self.output_dir = self.downloads_path / "fan_tl_chapters"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.session = requests.Session()
+
+    def _get_lumo_scraper(self):
+        return LumoScraper(self.output_dir, self.sanitize_filename)
+
+    def get_chapter_links_lumo(self, toc_url):
+        return self._get_lumo_scraper().discover_chapters(toc_url)
+
+    def download_chapters_lumo(self, chapter_links):
+        return self._get_lumo_scraper().download_chapters(chapter_links)
 
     def sanitize_filename(self, name):
         # Clean the filename to allow only safe characters for filesystems

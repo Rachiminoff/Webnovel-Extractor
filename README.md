@@ -1,115 +1,124 @@
-# Webnovel Extractor (FanTL Tool)
+# Webnovel Extractor
 
-A utility tool for downloading, cleaning, and compiling web novel chapters, primarily from **YoruApp** and **WordPress-hosted** novel sites. Designed specifically to handle fan translations and dynamically loaded content with minimal setup.
+A modular command-line utility for downloading, cleaning, and compiling web novel chapters. The project supports plain HTML sites and JavaScript-heavy sites through site-specific scrapers with browser-based fallbacks.
 
----
+> **Important:** Use this tool responsibly. Respect copyright, website terms, and the work of original authors and translators. Support official releases whenever available.
 
-## ⚠️ Important Notice
+## Supported download modes
 
-- This tool is **confirmed to work best on YoruApp/LumoStories** (a popular fan translation novel hosting platform) and **WordPress-based sites**.
-- Functionality on other novel websites or platforms **may be limited or require custom adjustments**.
-- Performance and reliability may vary outside these supported site types.
-- Chapters downloaded from YoruApp are already clean and properly structured. You can skip the cleaning step and proceed directly to compilation.
-- Always support the **original authors and official translations** whenever possible.
+| Mode | Site / type | Approach |
+|---|---|---|
+| 1 | Static HTML | Requests + BeautifulSoup |
+| 2 | YoruApp | Playwright-rendered browser scraping |
+| 3 | Foxaholic | Browser-assisted scraping |
+| 4 | Blogspot | Browser-assisted scraping |
+| 5 | Lumo Stories | Network/API discovery + DOM fallbacks |
 
----
+### Lumo Stories support
 
-## Features
+Lumo Stories uses a client-rendered interface, so the scraper uses multiple discovery strategies rather than trusting a single selector:
 
-**Downloader**
+1. Render the chapter list in a Playwright browser.
+2. Collect chapter URLs matching the site's `/read/` route pattern.
+3. Inspect captured JSON responses for chapter information.
+4. Search rendered HTML and inline application data as additional fallbacks.
+5. Scroll through the page to trigger lazy-loaded chapter lists.
+6. Save debug artifacts when discovery fails.
 
-- Enter a Table of Contents (TOC) URL for bulk downloads, or a single chapter URL.
-- Choose download type:
-  - **Static** – For sites serving plain HTML pages.
-  - **Rendered** – For JavaScript-heavy sites like YoruApp (requires Playwright).
+A result of zero chapters is treated as a failure rather than a successful download.
 
-**Cleaner**
+See [docs/lumo.md](docs/lumo.md) for implementation details.
 
-- Cleans downloaded chapters to remove extraneous content (ads, footers, translator notes).
-- Supports two cleaning modes:
-  - **Legacy**
-  - **Universal** (recommended)
+## Cleaning
 
-**Compiler**  
-- Compiles cleaned chapters into EPUB format for offline reading convenience.
+Downloaded chapters can contain site UI artifacts, watermarks, notices, and duplicated content. The cleaner provides:
 
-**EPUB to PDF Converter**
+- Legacy and universal cleaning modes.
+- Generic removal of common ads, notices, social links, and footer content.
+- Lumo-specific removal of artifacts such as `svg0`, `svg0 (icon)`, and the Lumo reproduction notice.
+- Duplicate paragraph removal.
+- Chapter-title normalization and XHTML output.
 
-- Converts EPUB ebooks to clean, well-formatted PDFs with cover extraction, chapter breaks, embedded images, and page numbers for easy reading and printing.
----
+See [docs/cleaning.md](docs/cleaning.md) for details.
+
+## Architecture
+
+```text
+Webnovel-Extractor/
+├── main.py
+├── components/
+│   ├── downloader.py          # Main download coordinator and existing adapters
+│   ├── Cleaner.py             # Chapter cleaning pipeline
+│   ├── compiler.py            # EPUB compilation
+│   ├── converter.py           # EPUB/PDF conversion
+│   └── scrapers/
+│       └── sites/
+│           └── lumo.py        # Dedicated Lumo scraper
+├── docs/
+│   ├── architecture.md
+│   ├── lumo.md
+│   ├── cleaning.md
+│   └── troubleshooting.md
+└── README.md
+```
+
+The goal is to keep site-specific scraping logic separate from the general application workflow so a redesign on one website does not require rewriting the whole downloader.
 
 ## Requirements
 
-- **Python 3.7+** (latest version recommended; Python 3.10+ preferred for best compatibility)
-- **Playwright** – For scraping JavaScript-heavy sites like YoruApp
-- **Requests** – For making HTTP requests
-- **BeautifulSoup4** – For parsing and cleaning HTML
-- **EbookLib** – For handling EPUB files (used in EPUB compilation and conversion)
-- **WeasyPrint** – For converting HTML content to PDF (used in EPUB to PDF conversion)
-- **Calibre** *(optional but recommended)* – For compiling to EPUB and other ebook formats
-- **Pandoc** *(optional)* – Universal document converter used in some EPUB pipelines
+- Python 3.7+ (Python 3.10+ recommended)
+- Playwright
+- Requests
+- BeautifulSoup4
+- EbookLib
+- WeasyPrint
+- lxml
+- Rich
 
-## Install Python dependencies
+Install Python dependencies:
 
 ```bash
-pip install requests beautifulsoup4 playwright ebooklib weasyprint
+pip install requests beautifulsoup4 playwright ebooklib weasyprint lxml rich
 playwright install
-
 ```
 
-## Install EPUB tools
+### Optional tools
 
-### Calibre 
+- [Calibre](https://calibre-ebook.com/download) for ebook workflows.
+- [Pandoc](https://pandoc.org/install.html) for document conversion workflows.
 
-Download from:  
-https://calibre-ebook.com/download
-
-Add to PATH if needed:
+## Running the application
 
 ```bash
-# Example for Windows
-setx PATH "%PATH%;C:\Program Files\Calibre2"
+python main.py
 ```
 
-### Pandoc 
+Choose the appropriate download type and provide either a table-of-contents URL or the relevant chapter URL when prompted.
 
-Download from:  
-https://pandoc.org/install.html
+## Output folders
 
-Add to PATH if needed:
+By default, the project uses folders under your system Downloads directory:
 
-```bash
-# Example for Windows
-setx PATH "%PATH%;C:\Program Files\Pandoc"
-```
----
-
-## 📁 Directory Structure
-By default, the tool creates and uses these folders inside your system’s **Downloads** directory (e.g., `C:\Users\YourName\Downloads` on Windows or `/home/yourname/Downloads` on Linux/macOS). You can change the paths in the source code if needed.
-
-```
-fan_tl_chapters/     # Raw downloaded HTML/XHTML chapters  
-fan_tl_markdown/     # Cleaned and processed XHTML chapters (ready for compilation)  
-output/              # Compiled EPUBs
+```text
+fan_tl_chapters/       Raw downloaded chapters
+fan_tl_chapters/debug/ Debug HTML, screenshots, and diagnostics
+fan_tl_markdown/       Cleaned XHTML chapters
+output/                Compiled EPUB or other output files
 ```
 
-**Note:**  
-- Make sure these folders exist or let the program create them automatically.  
-- Keeping these directories organized helps separate raw data, cleaned content, and final compiled books for easier management.  
-- If you change the default locations in the code, remember to update your workflow accordingly.
+## Debugging scraper failures
 
----
+Website structures change. When a supported scraper cannot discover or extract content, check the debug directory first. The saved HTML and screenshots show what the browser actually received and are more useful than guessing at a website's current structure.
 
-## ⚠️ Limitations and Known Issues
+See [docs/troubleshooting.md](docs/troubleshooting.md).
 
-- The tool is tailored for **YoruApp and WordPress** sites — other platforms may require manual customization (selectors/scraping logic).
-- **Playwright dependency** adds installation complexity.
-- Large downloads may require a **stable internet connection** and **adequate system resources**.
+## Documentation
 
----
+- [Architecture](docs/architecture.md)
+- [Lumo Stories scraper](docs/lumo.md)
+- [Cleaning pipeline](docs/cleaning.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
-## 🤝 Contribution & Support
+## Contribution
 
-- Feel free to open **issues** or **pull requests** to improve support for more sites or add features.
-- Please use this tool responsibly and respect copyright laws.
-- **Support original authors, fan, and official translators whenever possible!**
+Contributions are welcome. When adding support for a new website, prefer a dedicated site adapter and multiple extraction strategies over scattering new selectors throughout the application.

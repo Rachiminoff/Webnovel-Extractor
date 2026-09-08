@@ -1,0 +1,31 @@
+# Core Web Scraping & HTTP
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.2.1
+html5lib==1.1
+
+# Browser Automation
+playwright==1.44.0
+
+# CLI & UI
+rich==13.7.1
+click==8.1.7
+colorama==0.4.6
+
+# EPUB Creation
+ebooklib==0.18
+cssutils==2.11.0  # For style processing
+html2text==2024.2.26  # For text extraction
+
+# Data Processing
+python-dateutil==2.9.0
+pytz==2024.1
+
+# Optional: PDF Conversion
+weasyprint==61.2  # Optional - requires GTK
+
+# Optional: Progress & Logging
+tqdm==4.66.4  # Alternative to rich progress
+
+# Development & Debugging
+ipdb==0.13.13

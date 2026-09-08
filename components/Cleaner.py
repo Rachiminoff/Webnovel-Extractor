@@ -111,6 +111,9 @@ class ChapterCleaner:
         print(f"Raw length: {len(content.get_text(strip=True))}")
 
         self.remove_unwanted_tags(content)
+        self.clean_lumo_artifacts(content)
+        self.remove_lumo_control_artifacts(content)
+        self.remove_empty_artifact_wrappers(content)
         self.remove_wp_important_update(content)   # ⭐ FIX HERE
         self.clean_notice_blocks(content)
         self.remove_announcement_blocks(content)
@@ -132,6 +135,83 @@ class ChapterCleaner:
         heading = f"<h1>Chapter {chapter_num}</h1>\n"
 
         return self.wrap_xhtml(heading + str(content), f"Chapter {chapter_num}")
+
+    # ---------------- SITE-SPECIFIC CLEANING ----------------
+
+    def clean_lumo_artifacts(self, soup):
+        """Remove Lumo Stories reader artifacts without touching chapter prose."""
+        watermark = re.compile(
+            r"^\s*read\s+on\s+lumo\s+stories\.\s*"
+            r"unauthorized\s+reproduction\s+prohibited\.\s*$",
+            re.I,
+        )
+        svg_artifact = re.compile(
+            r"^\s*svg\d+(?:\s*\(icon\))?\s*$", re.I
+        )
+
+        # Remove decorative SVG elements first. Their accessibility labels can
+        # otherwise be serialized by BeautifulSoup as text such as ``svg0``.
+        for tag in list(soup.find_all("svg")):
+            tag.decompose()
+
+        # Remove standalone watermark and SVG placeholder text. Only target
+        # exact artifact lines so ordinary prose containing similar words stays.
+        for tag in list(soup.find_all(["p", "div", "span", "figure"])):
+            text = tag.get_text(" ", strip=True)
+            if watermark.fullmatch(text) or svg_artifact.fullmatch(text):
+                tag.decompose()
+
+        # Some downloads flatten artifacts directly into text nodes rather than
+        # wrapping them in a dedicated element. Clean those exact text nodes too.
+        for node in list(soup.find_all(string=True)):
+            text = str(node).strip()
+            if watermark.fullmatch(text) or svg_artifact.fullmatch(text):
+                node.extract()
+
+    def remove_lumo_control_artifacts(self, soup):
+        """Remove reader UI controls that can survive after SVG removal.
+
+        Lumo's chapter DOM can contain tiny button/input/icon wrappers inside
+        the same container as the prose. After SVGs are removed, some wrappers
+        serialize as a visible ``0`` or as an empty control with a border.
+        These elements are reader UI, not chapter content.
+        """
+        artifact_text = {"", "0", "svg0", "svg0 (icon)", "icon"}
+
+        # Reader controls should never be part of the cleaned chapter body.
+        for tag in list(soup.find_all(["button", "input", "select", "textarea", "svg", "use", "symbol"])):
+            tag.decompose()
+
+        # Remove short, non-prose wrappers that only contain a leftover icon
+        # label or counter. Keep normal paragraphs untouched.
+        for tag in list(soup.find_all(["span", "div", "label", "figure", "a", "li"])):
+            text = tag.get_text(" ", strip=True)
+            norm = re.sub(r"\s+", " ", text).strip().lower()
+
+            if norm in artifact_text:
+                tag.decompose()
+
+        # Horizontal separators around icon controls are visual UI noise in
+        # downloaded chapters and can remain after their neighbouring controls
+        # are removed.
+        for tag in list(soup.find_all("hr")):
+            tag.decompose()
+
+    def remove_empty_artifact_wrappers(self, soup):
+        """Repeatedly prune empty wrappers left behind by artifact removal."""
+        wrapper_names = {"div", "span", "section", "figure", "label", "p", "li"}
+
+        # Work from the deepest nodes upward so nested empty wrappers collapse.
+        for _ in range(3):
+            removed = False
+            for tag in list(reversed(soup.find_all(wrapper_names))):
+                if tag.find(["img", "br", "audio", "video"]) is not None:
+                    continue
+                if not tag.get_text(" ", strip=True) and not tag.find(True):
+                    tag.decompose()
+                    removed = True
+            if not removed:
+                break
 
     # ---------------- SAFE IMPORTANT UPDATE REMOVER ----------------
 
