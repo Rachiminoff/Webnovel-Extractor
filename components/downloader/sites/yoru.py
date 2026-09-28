@@ -19,6 +19,7 @@ class YoruExtractor(SiteExtractor):
     
     name = "yoru"
     description = "Yoru/Lumo Stories (React/Next.js)"
+    requires_browser = True
     
     def extract_chapters(self, toc_url: str) -> List[Chapter]:
         """Extract chapters using multiple strategies."""

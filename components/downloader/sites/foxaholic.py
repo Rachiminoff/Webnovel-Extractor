@@ -17,6 +17,7 @@ class FoxaholicExtractor(SiteExtractor):
     
     name = "foxaholic"
     description = "Foxaholic (JavaScript content)"
+    requires_browser = True
     
     def extract_chapters(self, toc_url: str) -> List[Chapter]:
         """Extract chapters from Foxaholic TOC."""

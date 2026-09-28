@@ -31,6 +31,7 @@ class SiteExtractor(ABC):
     
     name: str = "base"
     description: str = "Base extractor"
+    requires_browser: bool = False
     
     @abstractmethod
     def extract_chapters(self, toc_url: str) -> List[Chapter]:

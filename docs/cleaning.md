@@ -2,68 +2,89 @@
 
 ## Purpose
 
-The downloader captures what the browser exposes. That can include reader-interface artifacts that are not part of the chapter itself. The cleaner transforms raw chapter files into cleaner XHTML suitable for compilation.
+A downloaded web page is not automatically a clean ebook chapter.
 
-## Generic cleanup
+Websites often place navigation, advertisements, reader controls, social links, watermarks, and other interface elements around the actual prose. The cleaning stage removes those unwanted parts while keeping the chapter text.
 
-The cleaning pipeline can remove or normalize:
+The important design choice is that downloading and cleaning are separate operations.
 
-- Unwanted HTML tags.
-- Common notices and announcements.
-- Social and support links.
-- Duplicate paragraphs.
-- Repeated chapter titles.
-- Excess attributes.
+```text
+Raw chapter
+    ↓
+Cleaning rules
+    ↓
+Normalized XHTML
+```
 
-## Lumo Stories cleanup
+The raw download remains available for inspection if a cleaning rule needs to be changed later.
 
-Lumo chapters may contain reader artifacts such as:
+---
+
+## General cleanup
+
+The cleaning pipeline can remove or normalize common web-page artifacts, including:
+
+- unwanted HTML elements;
+- scripts and styles that do not belong in the chapter;
+- common notices and announcements;
+- social/support links;
+- repeated chapter titles;
+- duplicate paragraphs;
+- unnecessary attributes;
+- empty wrappers left after other elements are removed.
+
+The exact cleanup depends on the cleaner mode and the source.
+
+---
+
+## Lumo-specific cleanup
+
+Lumo's reader can place interface elements inside the same DOM area as the chapter prose.
+
+Known artifacts include examples such as:
 
 ```text
 svg0
 svg0 (icon)
-
+0
 Read on Lumo Stories. Unauthorized reproduction prohibited.
 ```
 
-The cleaner removes these using targeted rules rather than broadly deleting any text containing words such as `svg` or `read`.
+The cleaner uses targeted rules for known artifacts rather than blindly deleting every element containing words such as `svg` or `icon`.
 
-It also removes decorative `<svg>` elements before text serialization when appropriate.
+It can also remove reader controls such as:
 
-### Example
+- buttons;
+- input controls;
+- select controls;
+- decorative SVG elements;
+- horizontal separators associated with controls;
+- empty wrappers left after removal.
 
-Before:
+---
 
-```text
-# A machine without emotions.
+## Why cleanup is separate
 
-svg0
+Separating the stages makes troubleshooting easier.
 
-Night had fallen over the city.
+If the raw file contains the correct chapter text but the cleaned file does not, the problem is in the cleaning rules.
 
-Read on Lumo Stories. Unauthorized reproduction prohibited.
+If the raw file already lacks the chapter text, the problem is earlier in the download/extraction stage.
 
-svg0 (icon)
+This distinction prevents scraper problems and cleaning problems from being confused with each other.
 
-After finishing her third cup of coffee...
-```
+---
 
-After:
+## Safe maintenance
 
-```text
-# A machine without emotions.
+Cleaning rules should be narrow whenever possible.
 
-Night had fallen over the city.
+For example, a rule that removes a known Lumo reproduction notice is safer than a rule that removes every paragraph containing the word `reproduction`.
 
-After finishing her third cup of coffee...
-```
+Before changing a cleanup rule:
 
-## Why site-specific rules are useful
-
-A watermark or UI artifact may be unique to one website. A targeted cleanup rule reduces the risk of accidentally removing legitimate prose from chapters downloaded from another source.
-
-## Lumo reader-control artifacts
-
-Some Lumo chapters include reader-interface elements inside the same DOM container as the prose. After decorative SVG elements are removed, their wrappers may still render as tiny controls, counters such as `0`, or horizontal separators.
-
-The cleaner now performs an additional DOM-level pass that removes reader controls (`button`, `input`, `select`, and related SVG elements), standalone icon/counter remnants such as `0`, `svg0`, and `svg0 (icon)`, horizontal separators associated with those controls, and empty wrappers left behind after removal. A defensive version of the same cleanup also runs when Lumo HTML is initially downloaded.
+1. save an example of the unwanted element;
+2. identify what makes it unique;
+3. create the smallest selector or text rule that removes it;
+4. verify that normal prose is not affected;
+5. run the cleaner against several chapters.

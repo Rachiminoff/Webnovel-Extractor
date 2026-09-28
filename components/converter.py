@@ -89,6 +89,10 @@ class EPUBToPDF:
     </style>
     """
 
+    def __init__(self, output_dir=None):
+        self.output_dir = pathlib.Path(output_dir).expanduser() if output_dir else pathlib.Path.home() / "Downloads"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
     def encode_image_item(self, item):
         mime = item.media_type
         data = item.get_content()
@@ -197,6 +201,7 @@ class EPUBToPDF:
         print("Writing PDF...")
         HTML(string=full_html).write_pdf(output_pdf)
         print(f"✅ Done! PDF saved to: {output_pdf}")
+        return pathlib.Path(output_pdf)
 
     def convert_all_in_folder(self, folder_path, fullpage_images=False):
         folder = pathlib.Path(folder_path)
@@ -211,15 +216,21 @@ class EPUBToPDF:
 
         print(f"Found {len(epub_files)} EPUB(s). Starting conversion...")
 
+        succeeded = 0
+        failed = 0
+
         for epub_file in epub_files:
             output_pdf = epub_file.with_suffix(".pdf")
             print(f"\nConverting: {epub_file.name}")
             try:
                 self.epub_to_pdf_with_cover(str(epub_file), str(output_pdf), fullpage_images)
+                succeeded += 1
             except Exception as e:
+                failed += 1
                 print(f"Failed to convert {epub_file.name}: {e}")
 
         print("\nAll conversions done.")
+        return succeeded, failed
 
     def run(self):
         self.suppress_glib_warnings()

@@ -11,13 +11,14 @@ except ImportError:
     epub = None
 
 class EpubCompiler:
-    def __init__(self):
+    def __init__(self, workspace=None, output_dir=None):
         # Define directory for markdown/xhtml files (fan translations)
         self.downloads_path = Path.home() / "Downloads"
-        self.markdown_dir = self.downloads_path / "fan_tl_markdown"
-        # If fan_tl_markdown doesn't exist, fallback to fan_tl_chapters
-        if not self.markdown_dir.exists():
+        self.markdown_dir = Path(workspace).expanduser() if workspace else self.downloads_path / "fan_tl_markdown"
+        if not self.markdown_dir.exists() and workspace is None:
             self.markdown_dir = self.downloads_path / "fan_tl_chapters"
+        self.output_dir = Path(output_dir).expanduser() if output_dir else self.downloads_path
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Directory for images used inside chapters
         self.images_dir = self.markdown_dir / "images"
@@ -239,6 +240,34 @@ class EpubCompiler:
         epub.write_epub(str(output_path), book)
         print(f"✅ EPUB saved to: {output_path}")
 
+
+    def get_metadata_interactive(self, ui):
+        """Collect metadata through the unified Rich UI."""
+        title = ui.console.input("Title: ").strip()
+        author = ui.console.input("Author: ").strip()
+        language = ui.console.input("Language [en]: ").strip() or "en"
+        file_name = ui.console.input("Output filename [book]: ").strip() or "book"
+        cover_url = ui.console.input("Cover image URL (optional): ").strip()
+        cover_path = self.download_image(cover_url) if cover_url else None
+        return {"title": title or "Untitled", "author": author or "Unknown", "language": language, "file_name": file_name, "cover": cover_path}
+
+    def compile(self, choice, files, metadata):
+        """Compile using the selected engine and return the output path."""
+        output_path = self.output_dir / f"{metadata['file_name']}.epub"
+        meta_path = self.write_metadata(metadata)
+        try:
+            if choice == "1":
+                self.compile_epub_pandoc(files, meta_path, output_path, metadata.get("cover"))
+            elif choice == "2":
+                self.compile_epub_ebook_convert(files, metadata, output_path, metadata.get("cover"))
+            elif choice == "3":
+                self.compile_epub_ebooklib(files, metadata, output_path, metadata.get("cover"))
+            else:
+                raise ValueError("Unknown EPUB compiler")
+            return output_path
+        finally:
+            meta_path.unlink(missing_ok=True)
+
     def run(self):
         """
         Main interactive method for user to choose EPUB creation method,
@@ -275,7 +304,7 @@ class EpubCompiler:
 
         # Collect metadata info interactively
         metadata = self.get_metadata()
-        output_path = self.downloads_path / f"{metadata['file_name']}.epub"
+        output_path = self.output_dir / f"{metadata['file_name']}.epub"
 
         # For Pandoc, write YAML metadata file
         meta_path = self.write_metadata(metadata)

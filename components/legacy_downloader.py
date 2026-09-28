@@ -1,11 +1,6 @@
 import os
 import sys
 import requests
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt
-from rich.table import Table
-from rich import box
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -19,11 +14,10 @@ except ImportError:
 
 
 class ChapterDownloader:
-    def __init__(self, output_dir=None):
+    def __init__(self):
         # Set up output directory under user's Downloads folder
-        self.console = Console()
         self.downloads_path = Path.home() / "Downloads"
-        self.output_dir = Path(output_dir) if output_dir else self.downloads_path / "fan_tl_chapters"
+        self.output_dir = self.downloads_path / "fan_tl_chapters"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.session = requests.Session()
 
@@ -408,97 +402,40 @@ class ChapterDownloader:
 
     # --- RUN ---
     def run(self):
-        """Interactive downloader menu. Existing scraper implementations are kept intact."""
-        while True:
-            self.console.clear()
-            self.console.print(Panel(
-                "[bold bright_cyan]📥 Download Chapters[/bold bright_cyan]\n"
-                "[dim]Choose what you want to download.[/dim]",
-                border_style="bright_blue", box=box.ROUNDED
-            ))
-            table = Table(show_header=False, box=box.ROUNDED)
-            table.add_column("", width=5, style="bold cyan")
-            table.add_column("Action")
-            table.add_row("1", "Bulk download from a Table of Contents")
-            table.add_row("2", "Download a single chapter")
-            table.add_row("3", "View / change output folder")
-            table.add_row("4", "Back")
-            self.console.print(table)
+        print("Choose download source:")
+        print("1. Bulk download via Table of Contents URL")
+        print("2. Single chapter download")
+        source_mode = input("Enter choice (1 or 2): ").strip()
 
-            choice = Prompt.ask("Choose an option", choices=["1", "2", "3", "4"], default="1")
-            if choice == "4":
-                return
-            if choice == "3":
-                self.console.print(f"\n[cyan]Current output folder:[/cyan] {self.output_dir}")
-                new_dir = Prompt.ask("New output folder (leave blank to keep it)", default="")
-                if new_dir.strip():
-                    try:
-                        self.output_dir = Path(new_dir.strip()).expanduser()
-                        self.output_dir.mkdir(parents=True, exist_ok=True)
-                        self.console.print(f"[green]✓ Output folder changed to:[/green] {self.output_dir}")
-                    except Exception as exc:
-                        self.console.print(f"[red]✗ Could not use that folder.[/red]\n[dim]{exc}[/dim]")
-                Prompt.ask("Press Enter to continue", default="")
-                continue
+        print("Choose download type:")
+        print("1. Static (plain HTML site)")
+        print("2. YoruApp (JS content, needs browser)")
+        print("3. Foxaholic (JS content, needs browser)")
+        print("4. Blogspot (JS content, needs browser)")
+        render_mode = input("Enter type (1, 2, 3 or 4): ").strip()
 
-            self.console.print("\n[bold cyan]Download source[/bold cyan]")
-            sources = {
-                "1": ("Static HTML", "static"),
-                "2": ("Lumo Stories", "lumo"),
-                "3": ("YoruApp", "yoru"),
-                "4": ("Foxaholic", "foxaholic"),
-                "5": ("Blogspot", "blogspot"),
-            }
-            source_table = Table(show_header=False, box=box.SIMPLE)
-            source_table.add_column("", width=5)
-            source_table.add_column("Source")
-            for key, (label, _) in sources.items():
-                source_table.add_row(key, label)
-            self.console.print(source_table)
-            source_choice = Prompt.ask("Choose source", choices=list(sources), default="2")
-            source = sources[source_choice][1]
+        if source_mode == "1":
+            toc_url = input("Enter Table of Contents URL: ").strip()
+            if render_mode == "1":
+                chapter_links = self.get_chapter_links_static(toc_url)
+                self.download_html_static_bulk(chapter_links)
+            elif render_mode == "2":
+                chapter_links = self.get_chapter_links_yoru(toc_url)
+                self.download_chapters_yoru(chapter_links)
+            elif render_mode == "3":
+                chapter_links = self.get_chapter_links_foxaholic(toc_url)
+                self.download_chapters_foxaholic(chapter_links)
+            elif render_mode == "4":
+                chapter_links = self.get_chapter_links_blogspot_playwright(toc_url)
+                self.download_chapters_blogspot_playwright(chapter_links)
+        else:
+            site_type = None
+            if render_mode == "2":
+                site_type = "yoru"
+            elif render_mode == "3":
+                site_type = "foxaholic"
+            self.download_single_chapter(render_mode, site_type=site_type)
 
-            if choice == "1":
-                toc_url = Prompt.ask("Table of Contents URL")
-                try:
-                    if source == "static":
-                        links = self.get_chapter_links_static(toc_url)
-                        self.download_html_static_bulk(links)
-                    elif source == "lumo":
-                        links = self.get_chapter_links_lumo(toc_url)
-                        self.download_chapters_lumo(links)
-                    elif source == "yoru":
-                        links = self.get_chapter_links_yoru(toc_url)
-                        self.download_chapters_yoru(links)
-                    elif source == "foxaholic":
-                        links = self.get_chapter_links_foxaholic(toc_url)
-                        self.download_chapters_foxaholic(links)
-                    else:
-                        links = self.get_chapter_links_blogspot_playwright(toc_url)
-                        self.download_chapters_blogspot_playwright(links)
-                except KeyboardInterrupt:
-                    self.console.print("\n[yellow]⚠ Download cancelled.[/yellow]")
-                except Exception as exc:
-                    from cli.ui import friendly_error
-                    self.console.print(Panel(
-                        f"[bold red]The download could not be completed.[/bold red]\n\n"
-                        f"{friendly_error(exc)}\n\n"
-                        f"[dim]Technical details: {exc}[/dim]",
-                        title="Download error", border_style="red"
-                    ))
-            else:
-                site_type = None if source == "static" else source
-                try:
-                    self.download_single_chapter("1" if source == "static" else "2", site_type=site_type)
-                except KeyboardInterrupt:
-                    self.console.print("\n[yellow]⚠ Download cancelled.[/yellow]")
-                except Exception as exc:
-                    from cli.ui import friendly_error
-                    self.console.print(Panel(
-                        f"[bold red]The chapter could not be downloaded.[/bold red]\n\n{friendly_error(exc)}\n\n"
-                        f"[dim]Technical details: {exc}[/dim]",
-                        title="Download error", border_style="red"
-                    ))
 
-            Prompt.ask("\nPress Enter to continue", default="")
-
+if __name__ == "__main__":
+    ChapterDownloader().run()
